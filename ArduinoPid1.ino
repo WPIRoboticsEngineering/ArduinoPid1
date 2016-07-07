@@ -26,6 +26,7 @@ const int pin_pot_d = A2;
 // only effective when using vex motor driver
 const int pin_servo = 11;
 // only effective when using h bridge
+// if pin_pwm_fwd is high and pin_pwm_rev is low, the motor should increment the encoder
 const int pin_pwm_fwd = 5;
 const int pin_pwm_rev = 6;
 
