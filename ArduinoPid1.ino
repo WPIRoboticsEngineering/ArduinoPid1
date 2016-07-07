@@ -45,12 +45,16 @@ const double setpoint_2 = M_PI/6.; // rad
 // --- do not touch these ---
 // persistent variables for PID control
 double setpoint = 0; // rad
+double current_position = 0;
 unsigned long last_control_time = 0;
 double last_error = 0;
 double sum_error = 0;
 // persistent variables for stepping
 unsigned long last_step_time = 0;
 boolean setpoint_select = 0;
+// for detecting coefficient change
+int sum_coefficients = 0;
+int last_sum_coefficients = 0;
 
 
 void setup() {
@@ -96,14 +100,19 @@ void loop() {
     digitalWrite(pin_control_indicate, 1);
 
     // read the pot
-    double kp = analogRead(pin_pot_p) * kp_knob_sensitivity;
-    double ki = analogRead(pin_pot_i) * ki_knob_sensitivity;
-    double kd = analogRead(pin_pot_d) * kd_knob_sensitivity;
+    int kp_knob = analogRead(pin_pot_p);
+    int ki_knob = analogRead(pin_pot_i);
+    int kd_knob = analogRead(pin_pot_d);
+    double kp = kp_knob * kp_knob_sensitivity;
+    double ki = ki_knob * ki_knob_sensitivity;
+    double kd = kd_knob * kd_knob_sensitivity;
+    sum_coefficients = abs(kp_knob) + abs(ki_knob) + abs(kd_knob);
+
 
     // read the current position from encoder
     long current_position_encoder_tick = myEnc.read();
     // convert it to radians
-    double current_position = current_position_encoder_tick * 2 * M_PI / 3600.; // rad
+    current_position = current_position_encoder_tick * 2 * M_PI / 3600.; // rad
 
     // calculate error
     double error = current_position - setpoint;
@@ -122,6 +131,12 @@ void loop() {
     last_control_time = now;
 
     digitalWrite(pin_control_indicate, 0);
+
+    // clear the i term when you adjust the pid coefficients
+    if (abs(sum_coefficients - last_sum_coefficients) > 10) {
+      sum_error = 0;
+      last_sum_coefficients = sum_coefficients;
+    }
 
     // print data to graph
     Serial.print(current_position, print_precision);
@@ -147,13 +162,27 @@ void loop() {
   // change the setpoint
   if (now - last_step_time >= step_interval) {
     setpoint_select ^= 1;
-    setpoint = setpoint_select ? setpoint_1 : setpoint_2;
+    set_setpoint(setpoint_select ? setpoint_1 : setpoint_2);
     last_step_time = now;
   }
 }
 
+// set the setpoint
+void set_setpoint(double _setpoint) {
+  setpoint = _setpoint;
+  // avoid getting a spike in diff_error when stepping setpoint.
+  // alternatively you can calculate the d term with diff of sensor reading
+  // instead of error
+  last_error = current_position - setpoint;
+  // clear the i term. the i term sometimes have negative impact when your
+  // setpoint is a step function. but if you update the setpoint very often,
+  // or your setpoint is continuous, you should probably not clear the i term
+  // here.
+  // sum_error = 0;
+}
+
 // deliver the terminal voltage to the motor
-void drive_the_motor(double terminal_voltage){
+void drive_the_motor(double terminal_voltage) {
   #ifdef VEX_MOTOR_DRIVER
   // convert motor terminal voltage to servo signal
   int servo_signal = map(terminal_voltage, -5., 5., 70, 90);
@@ -161,7 +190,7 @@ void drive_the_motor(double terminal_voltage){
   myservo.write(servo_signal);
   #endif
   #ifdef H_BRIDGE
-  int h_bridge_signal = map(terminal_voltage, -12., 12., -255, 255);
+  int h_bridge_signal = constrain(map(terminal_voltage, -12., 12., -255, 255),-255,255);
   if (h_bridge_signal >= 0) {
     analogWrite(pin_pwm_fwd, h_bridge_signal);
     analogWrite(pin_pwm_rev, 0);
