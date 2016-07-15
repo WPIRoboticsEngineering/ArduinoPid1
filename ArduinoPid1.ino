@@ -13,6 +13,9 @@ Encoder myEnc(2, 3);
 Servo myservo;
 #endif
 
+// gear reduction ratio times encoder cpr
+const double encoder_tick_per_output_shaft_rotation = 34.014 * 48.;
+
 // the maximum adjustable range is ftom 0 to (1024 * sensitivity)
 const double kp_knob_sensitivity = 1.;
 const double ki_knob_sensitivity = 0.001;
@@ -37,7 +40,7 @@ const int print_precision = 6; // digits
 
 // set the preset setpoints and time between step
 // how long the setpoint stay at the same value for
-const int step_interval = 2000; // ms
+const int step_interval = 1000; // ms
 // setpoint will alternate between these two values
 const double setpoint_1 = -M_PI/6; // rad
 const double setpoint_2 = M_PI/6.; // rad
@@ -112,7 +115,7 @@ void loop() {
     // read the current position from encoder
     long current_position_encoder_tick = myEnc.read();
     // convert it to radians
-    current_position = current_position_encoder_tick * 2 * M_PI / 3600.; // rad
+    current_position = current_position_encoder_tick * 2 * M_PI / encoder_tick_per_output_shaft_rotation; // rad
 
     // calculate error
     double error = current_position - setpoint;
